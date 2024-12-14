@@ -1,13 +1,16 @@
 package rengar.cli;
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson.serializer.SerializerFeature;
+import org.apache.commons.cli.*;
 import rengar.checker.StaticPipeline;
 import rengar.checker.attack.AttackString;
 import rengar.checker.pattern.DisturbFreePattern;
-import com.alibaba.fastjson.JSONObject;
 import rengar.config.GlobalConfig;
-import org.apache.commons.cli.*;
 import rengar.parser.RegexParser;
 import rengar.util.Pair;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -46,7 +49,8 @@ public class Main {
         if (cli.hasOption("single")) {
             String b64regex = cli.getOptionValue("single");
             JSONObject jsonObject = Batch.handleSingleRegex(0, b64regex, true);
-            System.out.println(jsonObject);
+            String jsonString = JSON.toJSONString(jsonObject, SerializerFeature.PrettyFormat);
+            System.out.println(jsonString);
         } else {
             helpFormatter.printHelp("Rengar", options);
         }
@@ -158,7 +162,7 @@ public class Main {
             } else {
                 b64Regex = b64encode(patternStr);
             }
-            jsonObject.put("Regex", b64Regex);
+            jsonObject.put("Regex", b64decode(b64Regex));
             StaticPipeline.Result result = StaticPipeline.runWithTimeOut(
                     patternStr,
                     RegexParser.Language.Java,
@@ -179,7 +183,12 @@ public class Main {
                             AttackString as = pair.getRight();
                             JSONObject patternObj = new JSONObject();
                             patternObj.put("Type", pattern.getType());
-                            patternObj.put("AttackString", b64encode(as.genReadableStr()));
+                            patternObj.put("AttackString", as.genReadableStr());
+                            JSONObject regexObj = new JSONObject();
+                            regexObj.put("Prefix", pattern.getPattern().getPrefixExpr().toString());
+                            regexObj.put("Attackable", pattern.getPattern().getAttackableExpr().toString());
+                            regexObj.put("Postfix", pattern.getPattern().getPostfixExpr().toString());
+                            patternObj.put("RegexStructure", regexObj);
                             patternList.add(patternObj);
                         }
                         jsonObject.put("Details", patternList);

@@ -24,6 +24,10 @@ public class DisturbFreePattern {
         return pattern.getType();
     }
 
+    public ReDoSPattern getPattern() {
+        return pattern;
+    }
+
     public DisturbFreePattern(ReDoSPattern pattern, List<SequenceExpr> disturbExprs) {
         this.pattern = pattern;
         this.disturbExprs.addAll(disturbExprs);
