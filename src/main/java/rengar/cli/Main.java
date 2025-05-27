@@ -16,11 +16,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class Main {
     private final static Options options = new Options();
     private final static CommandLineParser cliParser = new DefaultParser();
     private final static HelpFormatter helpFormatter = new HelpFormatter();
+    private static Boolean isRecoverRegex = false;
 
     public static void main(String[] args) throws IOException {
         CommandLine cli = initCommandArgument(args);
@@ -45,6 +48,9 @@ public class Main {
         if (cli.hasOption("threadNumber")) {
             int number = Integer.parseInt(cli.getOptionValue("threadNumber"));
             GlobalConfig.option.setThreadNumber(number);
+        }
+        if (cli.hasOption("recover")) {
+            isRecoverRegex = true;
         }
         if (cli.hasOption("single")) {
             String b64regex = cli.getOptionValue("single");
@@ -127,6 +133,13 @@ public class Main {
                 true,
                 "thread number"
         );
+        Option opt12 = new Option(
+                "r",
+                "recover",
+                false,
+                "recover preprocessed regex"
+        );
+        opt2.setRequired(false);
         opt11.setRequired(false);
         options.addOption(opt2);
         options.addOption(opt3);
@@ -138,6 +151,7 @@ public class Main {
         options.addOption(opt9);
         options.addOption(opt10);
         options.addOption(opt11);
+        options.addOption(opt12);
         try {
             return cliParser.parse(options, args);
         } catch (ParseException e) {
@@ -186,7 +200,15 @@ public class Main {
                             patternObj.put("AttackString", as.genReadableStr());
                             JSONObject regexObj = new JSONObject();
                             regexObj.put("Prefix", pattern.getPattern().getPrefixExpr().toString());
-                            regexObj.put("Attackable", pattern.getPattern().getAttackableExpr().toString());
+                            String attackable = pattern.getPattern().getAttackableExpr().toString();
+                            if (isRecoverRegex) {
+                                attackable = LookaheadSubstitutor.replaceLookaheadInB(
+                                        patternStr,
+                                        attackable,
+                                        2
+                                );
+                            }
+                            regexObj.put("Attackable", attackable);
                             regexObj.put("Postfix", pattern.getPattern().getPostfixExpr().toString());
                             patternObj.put("RegexStructure", regexObj);
                             patternList.add(patternObj);
@@ -211,6 +233,45 @@ public class Main {
                     Base64.getDecoder().decode(str.getBytes(StandardCharsets.UTF_8)),
                     StandardCharsets.UTF_8
             );
+        }
+    }
+}
+
+class LookaheadSubstitutor {
+    public static String replaceLookaheadInB(String A, String B, int contextLength) {
+        // 1. Extract the lookahead and its prefix and suffix from A
+        Pattern lookaheadPattern = Pattern.compile("(.{0," + contextLength + "})\\(\\?=(.*?)\\)(.{0," + contextLength + "})");
+        Matcher matcher = lookaheadPattern.matcher(A);
+
+        if (!matcher.find()) {
+            return B;
+        }
+
+        // Prefix before lookahead (escaped for regex matching)
+        String prefix = Pattern.quote(matcher.group(1));
+        // Lookahead content inside (?=...)
+        String lookahead = matcher.group(2);
+        // Suffix after lookahead
+        String suffix = Pattern.quote(matcher.group(3));
+        // Full lookahead expression to insert back into B
+        String fullLookahead = "(?=" + lookahead + ")";
+
+        // 2. Build a regex pattern to find the substring in B that corresponds to the lookahead
+        String searchPattern = prefix + "(.*?)" + suffix;
+        Pattern search = Pattern.compile(searchPattern);
+        Matcher bMatcher = search.matcher(B);
+
+        if (bMatcher.find()) {
+            // Extract the substring in B that replaces the lookahead in A
+            String match = bMatcher.group(1);
+            int start = bMatcher.start(1);
+            int end = bMatcher.end(1);
+            if (end >= B.length()) {
+                end = B.length() - 1;
+            }
+            return B.substring(0, start) + fullLookahead + B.substring(end);
+        } else {
+            return B;
         }
     }
 }
